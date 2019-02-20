@@ -3,6 +3,7 @@ package com.github.eirslett.maven.plugins.frontend.lib;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.*;
 import java.util.Arrays;
 
 import org.apache.commons.io.FileUtils;
@@ -16,6 +17,8 @@ public class NodeInstaller {
     public static final String DEFAULT_NODEJS_DOWNLOAD_ROOT = "https://nodejs.org/dist/";
 
     private static final Object LOCK = new Object();
+
+    private static final int MAX_PATH = 260;
 
     private String npmVersion, nodeVersion, nodeDownloadRoot, userName, password;
 
@@ -230,6 +233,7 @@ public class NodeInstaller {
                     File nodeModulesDirectory = new File(destinationDirectory, "node_modules");
                     FileUtils.copyDirectory(tmpNodeModulesDir, nodeModulesDirectory);
                 }
+                flatternLongPath(tmpDirectory);
                 deleteTempDirectory(tmpDirectory);
 
                 this.logger.info("Installed node locally.");
@@ -295,6 +299,42 @@ public class NodeInstaller {
             this.logger.debug("Deleting temporary directory {}", tmpDirectory);
             FileUtils.deleteDirectory(tmpDirectory);
         }
+    }
+
+    /**
+     * Move files up to shortten a long path.
+     */
+    private void flatternLongPath(File base) throws IOException {
+        Path longPath = findLongPath(base);
+        while (longPath != null) {
+            Files.move(longPath, base.toPath().resolve(String.valueOf(System.currentTimeMillis())));
+            longPath = findLongPath(base);
+        }
+    }
+
+    /**
+     * Walk through a base Path and find any long paths if exists.
+     * A long path is a path whose string representation is longer than 260 chars.
+     */
+    private Path findLongPath(final File base) {
+        if (isLongPath(base.toPath())) {
+            return base.toPath();
+        }
+        File[] files = base.listFiles();
+        if (files == null || files.length == 0) { // not a directory, or empty folder
+            return null;
+        }
+        for (final File fileEntry : files) {
+            Path path = findLongPath(fileEntry);
+            if (path != null) {
+                return path;
+            }
+        }
+        return null;
+    }
+
+    private boolean isLongPath(Path path) {
+        return path.toString().length() > MAX_PATH;
     }
 
     private void extractFile(File archive, File destinationDirectory) throws ArchiveExtractionException {
